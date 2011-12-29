@@ -1,0 +1,163 @@
+#!/usr/bin/python
+#+
+# This script waits for media to appear in an optical drive
+# before continuing. It is useful with CD/DVD-burning tools
+# that seem incapable of doing this for themselves. Invoke it
+# as follows:
+#
+#     waitdisc [devicename]
+#
+# where devicename is the path to the device file for the
+# optical drive to poll; if omitted, this defaults to the
+# only optical drive on the system, with an error reported
+# if there is more than one.
+#
+# The script repeatedly polls the UDisks daemon via D-Bus for the
+# state of the specified drive, and exits when UDisks reports
+# that there is media in the drive.
+#
+# Written by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+#-
+
+import sys
+import os
+import time
+import dbus
+from xml.etree import \
+    ElementTree as XMLElementTree
+import getopt
+
+#+
+# Useful D-Bus stuff
+#-
+
+def introspect(obj) :
+    "constructs an XMLElementTree from the introspection of obj."
+    return \
+        XMLElementTree.fromstring \
+          (
+            dbus.Interface(obj, dbus_interface = "org.freedesktop.DBus.Introspectable")
+                .Introspect()
+          )
+#end introspect
+
+def get_prop(obj, interface, propname) :
+    "returns the value of a specified property from a specified interface for the object."
+    return \
+        dbus.Interface \
+          (
+            obj,
+            dbus_interface = "org.freedesktop.DBus.Properties"
+          ).Get(interface, propname)
+#end get_prop
+
+#+
+# Useful UDisks stuff
+#-
+
+udisks_bus = "org.freedesktop.UDisks"
+udisks_devices_root = "/org/freedesktop/UDisks/devices"
+
+def find_optical_writer_drives() :
+    "generator which yields D-Bus object paths and object references representing" \
+    " all optical writer drives found on the system."
+    try :
+        udisks_devices = \
+            dbus.SystemBus().get_object(udisks_bus, udisks_devices_root)
+    except dbus.exceptions.DBusException :
+        # assume udisks daemon not running
+        # udisks_devices = None
+        raise # don't bother recovering
+    #end try
+    if udisks_devices != None :
+        for device_node in introspect(udisks_devices).findall("node") :
+            device_name = udisks_devices_root + "/" + device_node.get("name")
+            device = dbus.SystemBus().get_object(udisks_bus, device_name)
+            if (
+                    not bool(int(get_prop(device, "org.freedesktop.UDisks.Device", "DeviceIsReadOnly")))
+                and
+                    reduce
+                      (
+                        lambda a, b : a or b,
+                          (
+                            "optical" in str(s)
+                            for s in
+                                get_prop(device, "org.freedesktop.UDisks.Device", "DriveMediaCompatibility")
+                          ),
+                        False
+                      )
+            ) :
+                yield device_name, device
+            #end if
+        #end for
+    #end if
+#end find_optical_writer_drives
+
+#+
+# Mainline
+#-
+
+DevicePath = None
+PollInterval = 0.25
+MessageInterval = 5.0
+Quiet = False
+(Opts, Args) = getopt.getopt \
+  (
+    sys.argv[1:],
+    "",
+    ("poll=", "quiet")
+  )
+if len(Args) > 1 :
+    raise getopt.GetoptError("need no more one arg, the device path of the optical drive")
+#end if
+for Keyword, Value in Opts :
+    if Keyword == "--poll" :
+        PollInterval = float(Value)
+    elif Keyword == "--quiet" :
+        Quiet = True
+    #end if
+#end for
+if len(Args) > 0 :
+    DevicePath = Args[0]
+#end if
+
+AvailDevices = list(find_optical_writer_drives())
+if DevicePath == None :
+    if len(AvailDevices) == 0 :
+        raise getopt.GetoptError("cannot find any optical writer drives")
+    #end if
+    if len(AvailDevices) > 1 :
+        raise getopt.GetoptError("more than one optical writer drive found: %s" % ", ".join(get_prop(dev[1], "org.freedesktop.UDisks.Device", "DeviceFile") for dev in AvailDevices))
+    #end if
+    DeviceName, DeviceObj = AvailDevices[0]
+    DevicePath = get_prop(DeviceObj, "org.freedesktop.UDisks.Device", "DeviceFile")
+    sys.stderr.write("%s: using default writer %s\n" % (sys.argv[0], DevicePath))
+else :
+    DeviceObj = dict \
+      (
+        (
+            get_prop(d[1], "org.freedesktop.UDisks.Device", "DeviceFile"), d[1],
+        )
+        for d in AvailDevices
+      ).get(DevicePath)
+    if DeviceObj == None :
+        raise getopt.GetoptError \
+          (
+            "device \"%s\" doesn't seem to be an optical writer" % DevicePath
+          )
+    #end if
+#end if
+
+LastMessage = time.time()
+while (
+    not bool(int(
+        get_prop(DeviceObj, "org.freedesktop.UDisks.Device", "DeviceIsMediaAvailable")
+    ))
+) :
+    Now = time.time()
+    if not Quiet and Now - LastMessage >= MessageInterval :
+        sys.stderr.write("waiting for disc on %s...\n" % DevicePath)
+        LastMessage = Now
+    #end if
+    time.sleep(PollInterval)
+#end while
