@@ -5,12 +5,15 @@
 # that seem incapable of doing this for themselves. Invoke it
 # as follows:
 #
-#     waitdisc [devicename]
+#     waitdisc [--close] [devicename]
 #
 # where devicename is the path to the device file for the
 # optical drive to poll; if omitted, this defaults to the
 # only optical drive on the system, with an error reported
 # if there is more than one.
+#
+# If --close is specified, then a command is sent to close
+# the device tray before polling starts.
 #
 # The script repeatedly polls the UDisks daemon via D-Bus for the
 # state of the specified drive, and exits when UDisks reports
@@ -22,10 +25,15 @@
 import sys
 import os
 import time
+from fcntl import \
+    ioctl
 import dbus
 from xml.etree import \
     ElementTree as XMLElementTree
 import getopt
+
+# from /usr/include/linux/cdrom.h
+CDROMCLOSETRAY = 0x5319
 
 #+
 # Useful D-Bus stuff
@@ -56,6 +64,7 @@ def get_prop(obj, interface, propname) :
 #-
 
 udisks_bus = "org.freedesktop.UDisks"
+udisks_device_interface = "org.freedesktop.UDisks.Device"
 udisks_devices_root = "/org/freedesktop/UDisks/devices"
 
 def find_optical_writer_drives() :
@@ -74,7 +83,7 @@ def find_optical_writer_drives() :
             device_name = udisks_devices_root + "/" + device_node.get("name")
             device = dbus.SystemBus().get_object(udisks_bus, device_name)
             if (
-                    not bool(int(get_prop(device, "org.freedesktop.UDisks.Device", "DeviceIsReadOnly")))
+                    not bool(int(get_prop(device, udisks_device_interface, "DeviceIsReadOnly")))
                 and
                     reduce
                       (
@@ -82,7 +91,7 @@ def find_optical_writer_drives() :
                           (
                             "optical" in str(s)
                             for s in
-                                get_prop(device, "org.freedesktop.UDisks.Device", "DriveMediaCompatibility")
+                                get_prop(device, udisks_device_interface, "DriveMediaCompatibility")
                           ),
                         False
                       )
@@ -97,6 +106,7 @@ def find_optical_writer_drives() :
 # Mainline
 #-
 
+DoClose = False
 DevicePath = None
 PollInterval = 0.25
 MessageInterval = 5.0
@@ -105,13 +115,15 @@ Quiet = False
   (
     sys.argv[1:],
     "",
-    ("poll=", "quiet")
+    ("close", "poll=", "quiet")
   )
 if len(Args) > 1 :
     raise getopt.GetoptError("need no more one arg, the device path of the optical drive")
 #end if
 for Keyword, Value in Opts :
-    if Keyword == "--poll" :
+    if Keyword == "--close" :
+        DoClose = True
+    elif Keyword == "--poll" :
         PollInterval = float(Value)
     elif Keyword == "--quiet" :
         Quiet = True
@@ -127,16 +139,16 @@ if DevicePath == None :
         raise getopt.GetoptError("cannot find any optical writer drives")
     #end if
     if len(AvailDevices) > 1 :
-        raise getopt.GetoptError("more than one optical writer drive found: %s" % ", ".join(get_prop(dev[1], "org.freedesktop.UDisks.Device", "DeviceFile") for dev in AvailDevices))
+        raise getopt.GetoptError("more than one optical writer drive found: %s" % ", ".join(get_prop(dev[1], udisks_device_interface, "DeviceFile") for dev in AvailDevices))
     #end if
     DeviceName, DeviceObj = AvailDevices[0]
-    DevicePath = get_prop(DeviceObj, "org.freedesktop.UDisks.Device", "DeviceFile")
+    DevicePath = get_prop(DeviceObj, udisks_device_interface, "DeviceFile")
     sys.stderr.write("%s: using default writer %s\n" % (sys.argv[0], DevicePath))
 else :
     DeviceObj = dict \
       (
         (
-            get_prop(d[1], "org.freedesktop.UDisks.Device", "DeviceFile"), d[1],
+            get_prop(d[1], udisks_device_interface, "DeviceFile"), d[1],
         )
         for d in AvailDevices
       ).get(DevicePath)
@@ -147,11 +159,21 @@ else :
           )
     #end if
 #end if
+if DoClose :
+    # UDisks doesn't provide any call for closing the device tray,
+    # so I do it the low-level way
+    fd = os.open(DevicePath, os.O_RDWR | os.O_NONBLOCK)
+      # O_NONBLOCK avoids immediate error if media hasn't been detected yet.
+      # Actually just opening the device file without this is sufficient to
+      # automatically close the tray, but what the heck.
+    ioctl(fd, CDROMCLOSETRAY)
+    os.close(fd)
+#end if
 
 LastMessage = time.time()
 while (
     not bool(int(
-        get_prop(DeviceObj, "org.freedesktop.UDisks.Device", "DeviceIsMediaAvailable")
+        get_prop(DeviceObj, udisks_device_interface, "DeviceIsMediaAvailable")
     ))
 ) :
     Now = time.time()
