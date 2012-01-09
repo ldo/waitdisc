@@ -109,7 +109,6 @@ def find_optical_writer_drives() :
 DoClose = False
 DevicePath = None
 PollInterval = 0.25
-MessageInterval = 5.0
 Quiet = False
 (Opts, Args) = getopt.getopt \
   (
@@ -143,7 +142,6 @@ if DevicePath == None :
     #end if
     DeviceName, DeviceObj = AvailDevices[0]
     DevicePath = get_prop(DeviceObj, udisks_device_interface, "DeviceFile")
-    sys.stderr.write("%s: using default writer %s\n" % (sys.argv[0], DevicePath))
 else :
     DeviceObj = dict \
       (
@@ -170,16 +168,17 @@ if DoClose :
     os.close(fd)
 #end if
 
-LastMessage = time.time()
+if not Quiet :
+    sys.stderr.write("waiting for disc on %s... " % DevicePath)
+    sys.stderr.flush()
+#end if
 while (
     not bool(int(
         get_prop(DeviceObj, udisks_device_interface, "DeviceIsMediaAvailable")
     ))
 ) :
-    Now = time.time()
-    if not Quiet and Now - LastMessage >= MessageInterval :
-        sys.stderr.write("waiting for disc on %s...\n" % DevicePath)
-        LastMessage = Now
-    #end if
     time.sleep(PollInterval)
 #end while
+if not Quiet :
+    sys.stderr.write("got it.\n")
+#end if
