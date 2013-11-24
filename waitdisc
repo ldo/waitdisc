@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 #+
 # This script waits for media to appear in an optical drive
 # before continuing. It is useful with CD/DVD-burning tools
@@ -23,6 +23,8 @@
 #-
 
 import sys
+from functools import \
+    reduce
 import os
 import time
 from fcntl import \
