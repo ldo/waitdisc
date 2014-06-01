@@ -19,7 +19,8 @@
 # state of the specified drive, and exits when UDisks reports
 # that there is media in the drive.
 #
-# Written by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Copyright 2013 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Licensed under CC-BY-SA <http://creativecommons.org/licenses/by-sa/4.0/>.
 #-
 
 import sys
