@@ -19,7 +19,7 @@
 # state of the specified drive, and exits when UDisks reports
 # that there is media in the drive.
 #
-# Copyright 2013 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Copyright 2013, 2014 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
 # Licensed under CC-BY-SA <http://creativecommons.org/licenses/by-sa/4.0/>.
 #-
 
@@ -52,15 +52,17 @@ def introspect(obj) :
           )
 #end introspect
 
-def get_prop(obj, interface, propname) :
+def get_prop(obj, interface, propname, conv = lambda x : x) :
     "returns the value of a specified property from a specified interface for the object."
     return \
-        dbus.Interface \
+        conv(dbus.Interface \
           (
             obj,
             dbus_interface = "org.freedesktop.DBus.Properties"
-          ).Get(interface, propname)
+          ).Get(interface, propname))
 #end get_prop
+
+to_bool = lambda x : bool(int(x))
 
 #+
 # Useful UDisks stuff
@@ -86,7 +88,7 @@ def find_optical_writer_drives() :
             device_name = udisks_devices_root + "/" + device_node.get("name")
             device = dbus.SystemBus().get_object(udisks_bus, device_name)
             if (
-                    not bool(int(get_prop(device, udisks_device_interface, "DeviceIsReadOnly")))
+                    not get_prop(device, udisks_device_interface, "DeviceIsReadOnly", to_bool)
                 and
                     reduce
                       (
@@ -175,11 +177,7 @@ if not Quiet :
     sys.stderr.write("waiting for disc on %s... " % DevicePath)
     sys.stderr.flush()
 #end if
-while (
-    not bool(int(
-        get_prop(DeviceObj, udisks_device_interface, "DeviceIsMediaAvailable")
-    ))
-) :
+while not get_prop(DeviceObj, udisks_device_interface, "DeviceIsMediaAvailable", to_bool) :
     time.sleep(PollInterval)
 #end while
 if not Quiet :
