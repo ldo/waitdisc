@@ -111,61 +111,61 @@ def find_optical_writer_drives() :
 # Mainline
 #-
 
-DoClose = False
-DevicePath = None
-PollInterval = 0.25
-Quiet = False
-(Opts, Args) = getopt.getopt \
+do_close = False
+device_path = None
+poll_interval = 0.25
+quiet = False
+(opts, args) = getopt.getopt \
   (
     sys.argv[1:],
     "",
     ("close", "poll=", "quiet")
   )
-if len(Args) > 1 :
+if len(args) > 1 :
     raise getopt.GetoptError("need no more one arg, the device path of the optical drive")
 #end if
-for Keyword, Value in Opts :
-    if Keyword == "--close" :
-        DoClose = True
-    elif Keyword == "--poll" :
-        PollInterval = float(Value)
-    elif Keyword == "--quiet" :
-        Quiet = True
+for keyword, value in opts :
+    if keyword == "--close" :
+        do_close = True
+    elif keyword == "--poll" :
+        poll_interval = float(value)
+    elif keyword == "--quiet" :
+        quiet = True
     #end if
 #end for
-if len(Args) > 0 :
-    DevicePath = Args[0]
+if len(args) > 0 :
+    device_path = args[0]
 #end if
 
-AvailDevices = list(find_optical_writer_drives())
-if DevicePath == None :
-    if len(AvailDevices) == 0 :
+avail_devices = list(find_optical_writer_drives())
+if device_path == None :
+    if len(avail_devices) == 0 :
         raise getopt.GetoptError("cannot find any optical writer drives")
     #end if
-    if len(AvailDevices) > 1 :
-        raise getopt.GetoptError("more than one optical writer drive found: %s" % ", ".join(get_prop(dev[1], udisks_device_interface, "DeviceFile") for dev in AvailDevices))
+    if len(avail_devices) > 1 :
+        raise getopt.GetoptError("more than one optical writer drive found: %s" % ", ".join(get_prop(dev[1], udisks_device_interface, "DeviceFile") for dev in avail_devices))
     #end if
-    DeviceName, DeviceObj = AvailDevices[0]
-    DevicePath = get_prop(DeviceObj, udisks_device_interface, "DeviceFile")
+    device_name, device_obj = avail_devices[0]
+    device_path = get_prop(device_obj, udisks_device_interface, "DeviceFile")
 else :
-    DeviceObj = dict \
+    device_obj = dict \
       (
         (
             get_prop(d[1], udisks_device_interface, "DeviceFile"), d[1],
         )
-        for d in AvailDevices
-      ).get(DevicePath)
-    if DeviceObj == None :
+        for d in avail_devices
+      ).get(device_path)
+    if device_obj == None :
         raise getopt.GetoptError \
           (
-            "device \"%s\" doesn't seem to be an optical writer" % DevicePath
+            "device \"%s\" doesn't seem to be an optical writer" % device_path
           )
     #end if
 #end if
-if DoClose :
+if do_close :
     # UDisks doesn't provide any call for closing the device tray,
     # so I do it the low-level way
-    fd = os.open(DevicePath, os.O_RDWR | os.O_NONBLOCK)
+    fd = os.open(device_path, os.O_RDWR | os.O_NONBLOCK)
       # O_NONBLOCK avoids immediate error if media hasn't been detected yet.
       # Actually just opening the device file without this is sufficient to
       # automatically close the tray, but what the heck.
@@ -173,13 +173,13 @@ if DoClose :
     os.close(fd)
 #end if
 
-if not Quiet :
-    sys.stderr.write("waiting for disc on %s... " % DevicePath)
+if not quiet :
+    sys.stderr.write("waiting for disc on %s... " % device_path)
     sys.stderr.flush()
 #end if
-while not get_prop(DeviceObj, udisks_device_interface, "DeviceIsMediaAvailable", to_bool) :
-    time.sleep(PollInterval)
+while not get_prop(device_obj, udisks_device_interface, "DeviceIsMediaAvailable", to_bool) :
+    time.sleep(poll_interval)
 #end while
-if not Quiet :
+if not quiet :
     sys.stderr.write("got it.\n")
 #end if
