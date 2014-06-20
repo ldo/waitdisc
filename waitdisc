@@ -134,7 +134,7 @@ for keyword, value in opts :
     #end if
 #end for
 if len(args) > 0 :
-    device_path = args[0]
+    device_path = os.path.realpath(args[0])
 #end if
 
 avail_devices = list(find_optical_writer_drives())
