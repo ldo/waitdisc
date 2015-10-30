@@ -19,13 +19,11 @@
 # state of the specified drive, and exits when UDisks reports
 # that there is media in the drive.
 #
-# Copyright 2013, 2014 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
+# Copyright 2013-2015 by Lawrence D'Oliveiro <ldo@geek-central.gen.nz>.
 # Licensed under CC-BY-SA <http://creativecommons.org/licenses/by-sa/4.0/>.
 #-
 
 import sys
-from functools import \
-    reduce
 import os
 import time
 from fcntl import \
@@ -90,15 +88,11 @@ def find_optical_writer_drives() :
             if (
                     not get_prop(device, udisks_device_interface, "DeviceIsReadOnly", to_bool)
                 and
-                    reduce
+                    any
                       (
-                        lambda a, b : a or b,
-                          (
-                            "optical" in str(s)
-                            for s in
-                                get_prop(device, udisks_device_interface, "DriveMediaCompatibility")
-                          ),
-                        False
+                        "optical" in str(s)
+                        for s in
+                            get_prop(device, udisks_device_interface, "DriveMediaCompatibility")
                       )
             ) :
                 yield device_name, device
