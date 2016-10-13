@@ -129,7 +129,7 @@ quiet = False
     ("close", "poll=", "quiet")
   )
 if len(args) > 1 :
-    raise getopt.GetoptError("need no more one arg, the device path of the optical drive")
+    raise getopt.GetoptError("need no more than one arg, the device path of the optical drive")
 #end if
 for keyword, value in opts :
     if keyword == "--close" :
