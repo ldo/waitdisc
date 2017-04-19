@@ -76,8 +76,10 @@ udisks_drives_root = "/org/freedesktop/UDisks2/drives"
 
 def find_optical_writer_drives() :
     "generator which yields D-Bus object paths and object references representing" \
-    " all optical writer drives found on the system."
-    # don’t bother recovering from any dbus.exceptions.DBusException errors,
+    " all optical drives found on the system."
+    # Unfortunately, UDisks2 doesn’t seem to offer any way to check that an
+    # optical drive actually supports writing, like UDisks did.
+    # Don’t bother recovering from any dbus.exceptions.DBusException errors,
     # for example simply die if UDisks2 daemon is not running.
     device_names = {}
     udisks_devices = dbus.SystemBus().get_object(udisks_bus, udisks_block_devices_root)
